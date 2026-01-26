@@ -149,3 +149,22 @@ class RotaryPositionalEmbedding(torch.nn.Module):
         x_out = rearrange(x_rot, "... d1 d2 -> ... (d1 d2)")
 
         return x_out
+    
+
+def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
+    """Compute softmax along specified dimension.
+
+    Args:
+        x: Input tensor.
+        dim: Dimension along which to compute softmax.
+
+    Returns:
+        Tensor with softmax applied along specified dimension.
+    """
+    # Without keepdim=True, the code will fail with a RuntimeError (shape mismatch) 
+    # whenever the reduction dimension (dim) is not the last dimension, due to how PyTorch handles broadcasting.
+    max_x = torch.max(x, dim=dim, keepdim=True).values
+    exp_x = torch.exp(x - max_x)
+    sum_exp_x = torch.sum(exp_x, dim=dim, keepdim=True)
+    return exp_x / sum_exp_x
+
