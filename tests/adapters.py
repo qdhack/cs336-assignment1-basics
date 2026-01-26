@@ -32,7 +32,7 @@ def run_linear(
     """
 
     layer = cs336_basics.model.Linear(d_in, d_out)
-    layer.weight.data = weights.clone()
+    layer.weight.data.copy_(weights)
     return layer.forward(in_features)
 
 
@@ -56,7 +56,7 @@ def run_embedding(
     """
 
     layer = cs336_basics.model.Embedding(vocab_size, d_model)
-    layer.weight.data = weights.clone()
+    layer.weight.data.copy_(weights)
     return layer.forward(token_ids)
 
 
@@ -384,7 +384,9 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    layer = cs336_basics.model.RMSNorm(d_model, eps)
+    layer.weight.data.copy_(weights)
+    return layer.forward(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
