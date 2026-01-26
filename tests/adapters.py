@@ -8,7 +8,9 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
-
+import cs336_basics.train_bpe 
+import cs336_basics.tokenizer
+import cs336_basics.model
 
 def run_linear(
     d_in: int,
@@ -29,7 +31,9 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    layer = cs336_basics.model.Linear(d_in, d_out)
+    layer.weight.data = weights.clone()
+    return layer.forward(in_features)
 
 
 def run_embedding(
@@ -51,7 +55,9 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    layer = cs336_basics.model.Embedding(vocab_size, d_model)
+    layer.weight.data = weights.clone()
+    return layer.forward(token_ids)
 
 
 def run_swiglu(
@@ -559,7 +565,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    return cs336_basics.tokenizer.Tokenizer(vocab, merges, special_tokens)
 
 
 def run_train_bpe(
@@ -589,4 +595,4 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    return cs336_basics.train_bpe.train_bpe(input_path, vocab_size, special_tokens)
