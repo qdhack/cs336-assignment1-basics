@@ -29,6 +29,7 @@ def find_chunk_boundaries(
 
     for bi in range(1, len(chunk_boundaries) - 1):
         initial_position = chunk_boundaries[bi]
+        # We don't search the first chunk since we want to distributed work to processes.
         file.seek(initial_position)  # Start at boundary guess
         while True:
             mini_chunk = file.read(mini_chunk_size)  # Read a mini chunk

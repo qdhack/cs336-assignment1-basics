@@ -14,7 +14,6 @@ class Linear(torch.nn.Module):
         std = math.sqrt(2 / (out_features + in_features))
         lower = -3 * std
         upper = 3 * std
-
         w = torch.empty((out_features, in_features), device=device, dtype=dtype)
         torch.nn.init.trunc_normal_(w, mean=mean, std=std, a=lower, b=upper)
 
