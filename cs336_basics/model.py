@@ -168,3 +168,21 @@ def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
     sum_exp_x = torch.sum(exp_x, dim=dim, keepdim=True)
     return exp_x / sum_exp_x
 
+
+def scaled_dot_product_attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor):
+    d_k = Q.shape[-1]
+
+    attention_scores = einsum(Q, K, "... seq_q d, ... seq_k d -> ... seq_q seq_k")
+    attention_scores = attention_scores / math.sqrt(d_k)
+    # Masking converts Control Flow (jumping code paths) into Data Flow (math operations), 
+    # no matter it's eager vs graph mode.
+    attention_scores = torch.where(mask, attention_scores, float("-inf"))
+
+    # dim=-1 : 
+    # For one specific query (one row), we want to calculate a probability distribution over all available keys
+    # "For this specific Query, how much do I care about Key A vs Key B vs Key C?"
+    attention_weights = softmax(attention_scores, dim=-1)
+    output = einsum(attention_weights, V, "... seq_q seq_k, ... seq_k d -> ... seq_q d")
+
+    return output
+
