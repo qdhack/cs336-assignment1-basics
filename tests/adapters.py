@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
+from tests.conftest import in_indices
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
@@ -73,7 +74,7 @@ def run_swiglu(
 
     Args:
         d_model (int): Dimensionality of the feedforward input and output.
-        d_ff (int): Dimensionality of the up-project happening internally to your swiglu.
+        d_ff (int): Dimensionality of the `up-project` happening internally to your swiglu.
         w1_weight (Float[Tensor, "d_ff d_model"]): Stored weights for W1
         w2_weight (Float[Tensor, "d_model d_ff"]): Stored weights for W2
         w3_weight (Float[Tensor, "d_ff d_model"]): Stored weights for W3
@@ -357,8 +358,8 @@ def run_transformer_lm(
     d_ff: int,
     rope_theta: float,
     weights: dict[str, Tensor],
-    in_indices: Int[Tensor, " batch_size sequence_length"],
-) -> Float[Tensor, " batch_size sequence_length vocab_size"]:
+    in_indices: Int[Tensor, "batch_size sequence_length"],
+) -> Float[Tensor, "batch_size sequence_length vocab_size"]:
     """Given the weights of a Transformer language model and input indices,
     return the output of running a forward pass on the input indices.
 
@@ -424,10 +425,12 @@ def run_transformer_lm(
             `sequence_length` is at most `context_length`.
 
     Returns:
-        Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
-        next-word distribution for each token.
-    """
-    raise NotImplementedError
+        Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted `unnormalized`
+        next-word distribution for each token. Shape is (batch_size, sequence_length, vocab_size).
+    """ 
+    transformer = cs336_basics.model.Transformer(d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta)
+    transformer.load_state_dict(_merge_attention_weights(weights))
+    return transformer(in_indices)
 
 
 def run_rmsnorm(

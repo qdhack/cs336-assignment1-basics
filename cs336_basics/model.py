@@ -297,3 +297,100 @@ class Block(torch.nn.Module):
         x = x + self.resid_dropout(self.ffn(self.ln2(x)))
         
         return x
+    
+
+class Transformer(torch.nn.Module):
+    """
+    A Decoder-only Transformer model (similar to LLaMA or GPT).
+
+    Architecture:
+    - Input: Token indices [batch, seq_len]
+    - Output: Logits [batch, seq_len, vocab_size] (No Softmax applied)
+    - Components: RMSNorm, SwiGLU (implied in blocks), and RoPE.
+    """
+    def __init__(
+        self,
+        d_model: int,         # Embedding dimension (e.g., 4096)
+        num_heads: int,       # Number of attention heads
+        d_ff: int,            # Hidden dimension of the Feed-Forward Network
+        vocab_size: int,      # Total size of vocabulary (e.g., 50257)
+        context_length: int,  # Maximum sequence length model can handle
+        num_layers: int,      # Number of Transformer Blocks to stack
+        rope_theta: float = 10000.0, # Base frequency for Rotary Embeddings
+        device=None,
+        dtype=None,
+        **kwargs,
+    ):
+        super().__init__()
+
+        self.context_length = context_length
+
+        # 1. Token Embeddings
+        # Converts integer token indices into dense vectors.
+        # Note: We do NOT add absolute positional embeddings here (like in GPT-2).
+        # Positional info is injected via RoPE inside the attention layers.
+        self.token_embeddings = Embedding(vocab_size, d_model, device, dtype, **kwargs)
+
+        if d_model % num_heads != 0:
+            raise ValueError("d_model must be divisible by num_heads")
+
+        d_head = d_model // num_heads
+
+        # 2. Rotary Positional Embeddings (RoPE)
+        # Q: Does this include trainable parameters?
+        # A: NO. RoPE is completely static. It pre-computes Sine and Cosine tables
+        #    (buffers) based on 'rope_theta'. These do not change during training.
+        rope = RotaryPositionalEmbedding(rope_theta, d_head, context_length, device=device, dtype=dtype)
+
+        # 3. Transformer Blocks
+        # Q: Why is the same 'rope' object passed to every block?
+        # A: Since RoPE math depends only on position (index 1, 2, 3...) and is identical
+        #    for every layer, we share the single 'rope' instance to save memory and compute.
+        #    It acts as a shared lookup table for frequency rotations.
+        self.layers = torch.nn.ModuleList(
+            [Block(d_model, num_heads, d_ff, rope, device, dtype, **kwargs) for _ in range(num_layers)]
+        )
+
+        # 4. Final Normalization (RMSNorm)
+        # Normalizes the features before the final projection.
+        self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
+
+        # 5. Language Model Head
+        # Projects internal state [d_model] back to vocabulary size [vocab_size].
+        self.lm_head = Linear(d_model, vocab_size, device, dtype)
+
+        # Weight Tying (Optional) 
+        # Links the output head weights to the input embedding weights.
+        # if kwargs.get("weight_tying", False):
+        #     self.lm_head.weight = self.token_embeddings.weight
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Input 'x' shape: [batch_size, seq_len]
+        batch_size, seq_len = x.shape
+
+        # Validation: Ensure input doesn't exceed the pre-computed RoPE tables.
+        if seq_len > self.context_length:
+            raise ValueError(f"Input sequence length ({seq_len}) exceeds model context length ({self.context_length})")
+
+        # Step A: Embed Tokens
+        # Shape: [batch, seq_len] -> [batch, seq_len, d_model]
+        x = self.token_embeddings(x)
+
+        # Step B: Transformer Layers
+        # Shape remains [batch, seq_len, d_model] throughout.
+        # The shared 'rope' object is used inside every layer's Attention mechanism.
+        for layer in self.layers:
+            x = layer(x)
+
+        # Step C: Final Norm
+        x = self.ln_final(x)
+
+        # Step D: Output Projection
+        # Shape: [batch, seq_len, d_model] -> [batch, seq_len, vocab_size]
+        # NOTE: This returns raw LOGITS.
+        # - The Softmax layer (shown in diagrams) is technically missing here.
+        # - This is intentional. We apply Softmax externally (e.g., inside CrossEntropyLoss)
+        #   for numerical stability during training.
+        x = self.lm_head(x)
+
+        return x
