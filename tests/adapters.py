@@ -141,14 +141,25 @@ def run_multihead_self_attention(
         q_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the Q projection
         k_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the K projection
         v_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the V projection
-        o_proj_weight (Float[Tensor, "d_model d_v"]): Weights for the output projection
+        o_proj_weight (Float[Tensor, "d_model d_v"]): Weights for the output projection: 
+          Mixing Information Across Heads (Integration) + Dimension Consistency
         in_features (Float[Tensor, "... sequence_length d_in"]): Tensor to run your implementation on.
 
     Returns:
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    mha = cs336_basics.model.CausalMultiHeadSelfAttention(d_model, num_heads)
+    combined_weight = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0)
+
+    mha.wqkv.weight.data = combined_weight
+    mha.output_proj.weight.data = o_proj_weight
+
+    # mha.to("cuda")
+    # in_features = in_features.to("cuda")
+
+    output = mha(in_features)
+    return output
 
 
 def run_multihead_self_attention_with_rope(
@@ -180,7 +191,8 @@ def run_multihead_self_attention_with_rope(
         q_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the Q projection
         k_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the K projection
         v_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the V projection
-        o_proj_weight (Float[Tensor, "d_model d_v"]): Weights for the output projection
+        o_proj_weight (Float[Tensor, "d_model d_v"]): Weights for the output projection: 
+          Mixing Information Across Heads (Integration) + Dimension Consistency
         in_features (Float[Tensor, "... sequence_length d_in"]): Tensor to run your implementation on.
         token_positions (Int[Tensor, " ... sequence_length"] | None): Optional tensor with the positions of the tokens
 
@@ -188,7 +200,20 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    mha = cs336_basics.model.CausalMultiHeadSelfAttention(d_model, num_heads)
+    combined_weight = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0)
+
+    mha.wqkv.weight.data = combined_weight
+    mha.output_proj.weight.data = o_proj_weight
+
+    # mha.to("cuda")
+    # in_features = in_features.to("cuda")
+
+    # Apply RoPE
+    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+
+    return mha(in_features, rope, token_positions)
+
 
 
 def run_rope(
