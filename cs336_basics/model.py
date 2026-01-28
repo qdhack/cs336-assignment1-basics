@@ -231,3 +231,69 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         y = scaled_dot_product_attention(q, k, v, mask)
         y = rearrange(y, "b h s d -> b s (h d)")
         return self.output_proj(y)
+
+
+class Block(torch.nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        rope: RotaryPositionalEmbedding | None = None,
+        device=None,
+        dtype=None,
+        **kwargs,
+    ):
+        """
+        Transformer Block with Pre-Norm architecture.
+        
+        Args:
+            d_model: Hidden dimension size.
+            num_heads: Number of attention heads.
+            d_ff: Feed-forward hidden dimension size.
+            rope: Rotary Positional Embedding module.
+            device: Torch device.
+            dtype: Torch data type.
+            **kwargs: 
+                - ffn_type (str): 'swiglu' (default) or 'silu'.
+                - dropout (float): Dropout probability for residual connections (default 0.0).
+                - remaining kwargs are passed to CausalMultiHeadSelfAttention.
+        """
+        super().__init__()
+
+        self.rope = rope
+
+        # 1. Clean extraction of Block-specific args.
+        # using .pop() ensures these don't accidentally get passed to self.attn below,
+        # which would cause a TypeError if the attention class is strict.
+        ffn_type = kwargs.pop("ffn_type", "swiglu")
+        dropout_p = kwargs.pop("dropout", 0.0)
+
+        self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
+        
+        # 2. Pass only the remaining relevant kwargs to Attention
+        self.attn = CausalMultiHeadSelfAttention(d_model, num_heads, device, dtype, **kwargs)
+
+        self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
+
+        # 3. Add Residual Dropout (Crucial for training deep networks)
+        # Use Identity if dropout is 0 to save compute/memory overhead
+        self.resid_dropout = torch.nn.Dropout(dropout_p) if dropout_p > 0 else torch.nn.Identity()
+
+        if ffn_type == "silu":
+            self.ffn = SiLU(d_model, d_ff, device, dtype)
+        elif ffn_type == "swiglu":
+            self.ffn = SwiGLU(d_model, d_ff, device, dtype)
+        else:
+            raise ValueError(f"Unsupported ffn_type: {ffn_type}")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Standard Pre-Norm Residual connection: x = x + Drop(Sublayer(Norm(x)))
+        
+        # Attention Block
+        x = x + self.resid_dropout(self.attn(self.ln1(x), self.rope))
+        
+        # Feed-Forward Block
+        x = x + self.resid_dropout(self.ffn(self.ln2(x)))
+        
+        return x

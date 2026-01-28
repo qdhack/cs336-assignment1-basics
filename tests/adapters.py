@@ -239,6 +239,37 @@ def run_rope(
     return rope.forward(in_query_or_key, token_positions)
 
 
+def _merge_attention_weights(weights: dict[str, Tensor]) -> dict[str, Tensor]:
+    if "attn.q_proj.weight" in weights:
+        weights["attn.wqkv.weight"] = torch.cat(
+            [weights["attn.q_proj.weight"], weights["attn.k_proj.weight"], weights["attn.v_proj.weight"]], dim=0
+        )
+
+        del weights["attn.q_proj.weight"]
+        del weights["attn.k_proj.weight"]
+        del weights["attn.v_proj.weight"]
+
+    layer_prefixes = set()
+    for key in list(weights.keys()):
+        if key.startswith("layers.") and key.endswith(".attn.q_proj.weight"):
+            layer_prefix = key.rsplit(".attn.q_proj.weight", 1)[0]
+            layer_prefixes.add(layer_prefix)
+
+    for prefix in layer_prefixes:
+        q_key = f"{prefix}.attn.q_proj.weight"
+        k_key = f"{prefix}.attn.k_proj.weight"
+        v_key = f"{prefix}.attn.v_proj.weight"
+
+        if q_key in weights and k_key in weights and v_key in weights:
+            weights[f"{prefix}.attn.wqkv.weight"] = torch.cat([weights[q_key], weights[k_key], weights[v_key]], dim=0)
+
+            del weights[q_key]
+            del weights[k_key]
+            del weights[v_key]
+
+    return weights
+
+
 def run_transformer_block(
     d_model: int,
     num_heads: int,
@@ -309,7 +340,12 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+
+    block = cs336_basics.model.Block(d_model, num_heads, d_ff, rope)
+    block.load_state_dict(_merge_attention_weights(weights))
+
+    return block(in_features)
 
 
 def run_transformer_lm(
