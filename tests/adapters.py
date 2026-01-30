@@ -15,6 +15,7 @@ import cs336_basics.model
 import cs336_basics.loss
 import cs336_basics.adamw
 import cs336_basics.lr_schedule
+import cs336_basics.gradient_clip
 
 
 def run_linear(
@@ -542,7 +543,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    return cs336_basics.gradient_clip.gradient_clip(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> Any:
