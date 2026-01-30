@@ -16,6 +16,7 @@ import cs336_basics.loss
 import cs336_basics.adamw
 import cs336_basics.lr_schedule
 import cs336_basics.gradient_clip
+import cs336_basics.data_loader
 
 
 def run_linear(
@@ -478,6 +479,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
 
 
 def run_get_batch(
+        # numpy.typing as npt
     dataset: npt.NDArray, batch_size: int, context_length: int, device: str
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
@@ -497,7 +499,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    return cs336_basics.data_loader.get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
