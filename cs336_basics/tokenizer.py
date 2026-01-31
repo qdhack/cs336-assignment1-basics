@@ -11,13 +11,19 @@ class Tokenizer:
     ):
         """
         Constructs a tokenizer from a vocab, list of merges, and (optionally) list of special tokens.
-        """
-        # token id to token bytes
+        """ 
+        # Mapping from token id -> token bytes (vocabulary)
         self.vocab = vocab
-        # token bytes to token id
-        self.vocab_inv = {v: k for k, v in vocab.items()}
+        # Inverse mapping: maps the token (bytes) representation to the integer id used throughout the model.
+        self.token_to_id = {v: k for k, v in vocab.items()}
+        # merges: list of byte-pair merge rules learned during BPE training.
+        # Each element is a tuple (bytes1, bytes2) representing two subword units that should be merged.
+        # The list is ordered by merge priority: earlier merges have higher priority (lower rank).
+        # Example: [(b'h', b'e'), (b'l', b'l'), ...] means merge 'h'+'e' before 'l'+'l'.
         self.merges = merges
-        # pair to index rank
+        # merges_dict: maps each (bytes1, bytes2) pair to its rank (index in merges list).
+        # Lower rank = higher priority = merge earlier during encoding.
+        # Used in _merge_subword() to greedily select the best pair to merge at each step.
         self.merges_dict = {merge: i for i, merge in enumerate(merges)}
         # cache mapping pretokens (strings) to their encoded token IDs (list of ints)
         self.encode_cache = {}
@@ -32,9 +38,10 @@ class Tokenizer:
             next_id = max(self.vocab.keys()) + 1
             for token in special_tokens:
                 token_bytes = token.encode("UTF-8")
-                if token_bytes not in self.vocab_inv:
+                # Add unseen special tokens into both vocab and inverse lookup.
+                if token_bytes not in self.token_to_id:
                     self.vocab[next_id] = token_bytes
-                    self.vocab_inv[token_bytes] = next_id
+                    self.token_to_id[token_bytes] = next_id
                     next_id += 1
         else:
             self.special_tokens = None
@@ -80,7 +87,7 @@ class Tokenizer:
         for part in special_chunks:
             if part in self.special_tokens:
                 # this is a special token
-                ids.append(self.vocab_inv[part.encode("UTF-8")])
+                ids.append(self.token_to_id[part.encode("UTF-8")])
             else:
                 # this is ordinary text
                 ids.extend(self._encode_chunk(part))
@@ -107,7 +114,8 @@ class Tokenizer:
                     pretoken_reprs[p] = match_bytes
 
                 merged = self._merge_subword(pretoken_reprs[p])
-                token_ids = [self.vocab_inv[subword] for subword in merged]
+                # Look up each merged subword (bytes) in the inverse vocab to get its id.
+                token_ids = [self.token_to_id[subword] for subword in merged]
                 # Cache the encoded token IDs for this pretoken
                 self.encode_cache[p] = token_ids
                 ids.extend(token_ids)
